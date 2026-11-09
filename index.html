@@ -39,9 +39,9 @@ const weapons=[
  {name:'SÚNG ĐIỆN',short:'EL',desc:'Phóng điện lan mục tiêu',cost:540,rate:.92,damage:25,speed:900,color:'#91d7ff',kind:'electric',magazine:12,reloadTime:1.95,heatPerShot:3.1}
 ];
 const vehicleDefs=[
- {id:'scout',name:'XE TRINH SÁT',desc:'Nhanh, linh hoạt',hp:100,speed:180,defense:0,unlockAt:0,starCost:0,body:'#48596a',accent:'#9b4c38',cabin:'#526a7d'},
- {id:'tank',name:'XE BỌC THÉP',desc:'Giáp dày, chịu đòn tốt',hp:150,speed:154,defense:2,unlockAt:10,starCost:8,body:'#53645d',accent:'#a47a42',cabin:'#596e68'},
- {id:'heavy',name:'SIÊU XA TẢI',desc:'Máu lớn, khung cực chắc',hp:190,speed:136,defense:4,unlockAt:20,starCost:18,body:'#5d5549',accent:'#8c6844',cabin:'#6b6254'}
+ {id:'scout',name:'XE TRINH SÁT',desc:'Nhanh, linh hoạt',hp:150,speed:180,defense:0,unlockAt:0,starCost:0,body:'#48596a',accent:'#9b4c38',cabin:'#526a7d'},
+ {id:'tank',name:'XE BỌC THÉP',desc:'Giáp dày, chịu đòn tốt',hp:200,speed:154,defense:2,unlockAt:10,starCost:8,body:'#53645d',accent:'#a47a42',cabin:'#596e68'},
+ {id:'heavy',name:'SIÊU XA TẢI',desc:'Máu lớn, khung cực chắc',hp:240,speed:136,defense:4,unlockAt:20,starCost:18,body:'#5d5549',accent:'#8c6844',cabin:'#6b6254'}
 ];
 const chapters=[
  {name:'ĐƯỜNG VÀNH ĐAI',sub:'Rời khỏi vùng ngoại ô',color:'#65d8d0'},
@@ -299,7 +299,7 @@ function spawnEnemy(){
  let [size,baseHp,baseSpeed]=profile;
  let hp=Math.round((baseHp+diff*3.2)*ramp);
  let speed=(baseSpeed+diff*.65)*(1+diff*.012);
- enemies.push({x:990+Math.random()*70,y:310+Math.random()*92,hp,maxHp:hp,speed,type,size,attack:type==='spitter'?1.2:.0,hit:0,exploded:false});spawned++;
+ enemies.push({x:990+Math.random()*70,y:310+Math.random()*92,hp,maxHp:hp,speed,type,size,attack:type==='spitter'?1.2:.0,hit:0,exploded:false,knockback:0,slowTimer:0,slowFactor:1});spawned++;
 }
 function targetFor(){let list=enemies.filter(e=>e.x>player.x+55);if(targetMode==='boss'&&boss&&boss.x>player.x+55)return boss;if(targetMode==='zombies'&&list.length){list.sort((a,b)=>a.x-b.x);return list[0];}if(boss&&boss.x>player.x+55)return boss;if(!list.length)return null;list.sort((a,b)=>a.x-b.x);return list[0];}
 function allTargets(){return boss?[...enemies,boss]:enemies;}
@@ -318,26 +318,27 @@ function shoot(){
  if(w.kind==='electric'){
   const chain=3+(rank>=2?1:0)+(rank>=4?1:0),radius=125+rank*5,chainDamage=.58+rank*.025;
   const near=allTargets().filter(e=>Math.hypot(e.x-target.x,e.y-target.y)<radius).sort((a,b)=>Math.hypot(a.x-target.x,a.y-target.y)-Math.hypot(b.x-target.x,b.y-target.y)).slice(0,chain);
-  near.forEach((e,i)=>hurt(e,damage*(i===0?1:chainDamage)));
+  near.forEach((e,i)=>hurt(e,damage*(i===0?1:chainDamage),e===boss?18:knockbackFor(e)));
   for(let e of near)particles.push({x:e.x,y:e.y-15,life:.22,max:.22,color:'#a4edff',kind:'spark'});
  }else if(w.kind==='flame'){
   const reach=Math.max(245+rank*24,boss?650:0),width=78+rank*3;
   const near=allTargets().filter(e=>e.x>sx&&e.x<sx+reach&&Math.abs(e.y-sy)<width);
-  near.forEach(e=>hurt(e,damage));
+  near.forEach(e=>hurt(e,damage,0,.48));
   for(let i=0;i<22;i++)particles.push({x:sx+25+Math.random()*Math.min(210,reach*.45),y:sy+(Math.random()-.5)*68,vx:65+Math.random()*130,vy:(Math.random()-.5)*90,life:.32+Math.random()*.25,max:.55,color:['#fff3a6','#ffcf62','#ff8848','#e94e32'][i%4],kind:'flame',r:5+Math.random()*8});
  }else if(w.kind==='spread'){
   const pellets=5+(rank>=2?1:0)+(rank>=4?1:0),spread=.095*Math.max(.58,1-rank*.105);
-  for(let n=0;n<pellets;n++){let a=(n-(pellets-1)/2)*spread,ang=Math.atan2(dy,dx)+a;bullets.push({x:sx,y:sy,vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,damage:damage,color:w.color,life:.8,r:3});}
+  for(let n=0;n<pellets;n++){let a=(n-(pellets-1)/2)*spread,ang=Math.atan2(dy,dx)+a;bullets.push({x:sx,y:sy,vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,damage:damage,color:w.color,life:.8,r:3,knockback:knockbackFor(target)});}
  }else{
   const blast=95+rank*10;
-  bullets.push({x:sx,y:sy,vx:dx/dist*w.speed,vy:dy/dist*w.speed,damage,color:w.color,life:w.kind==='rocket'?1.5:1.6,r:w.kind==='rocket'?6:3,rocket:w.kind==='rocket',blast,splash:.48+rank*.035});
+  bullets.push({x:sx,y:sy,vx:dx/dist*w.speed,vy:dy/dist*w.speed,damage,color:w.color,life:w.kind==='rocket'?1.5:1.6,r:w.kind==='rocket'?6:3,rocket:w.kind==='rocket',blast,splash:.48+rank*.035,knockback:knockbackFor(target)});
  }
  particles.push({x:sx,y:sy,life:.16,max:.16,color:w.color,kind:'muzzle',r:12});
  if(w.kind==='rocket')particles.push({x:sx-6,y:sy,life:.35,max:.35,color:'#ffb36c',kind:'smoke'});
  if(w.kind==='spread')particles.push({x:sx,y:sy,life:.18,max:.18,color:'#ffe0a0',kind:'muzzle',r:18});
 }
 
-function hurt(e,dmg){if(e===boss){e.hp-=dmg;e.hit=.12;floating.push({x:e.x,y:e.y-75,text:'-'+Math.round(dmg),life:.55});if(e.hp<=0){addCoins(220+chapter*70);bossDeathFx=1.4;for(let n=0;n<26;n++)particles.push({x:e.x+(Math.random()-.5)*55,y:e.y+(Math.random()-.5)*75,life:.45+Math.random()*.55,max:1,color:n%3===0?'#fff0a6':(n%2?'#ff784e':'#ffbe67'),kind:'burst'});boss=null;save.achievements.first_bossDone=true;let count=2+Math.floor(Math.random()*2),pool=[0,1,2,3,4],rewards=[];for(let n=0;n<count;n++){let wi=pool.splice(Math.floor(Math.random()*pool.length),1)[0];rewards.push({wi,frags:5+Math.floor(Math.random()*3)});}lootModal={rewards,coins:180+chapter*50};addCoins(lootModal.coins);checkAchievements();}return;}if(!enemies.includes(e))return;if(e.type==='armored')dmg*=.62;e.hp-=dmg;e.hit=.12;floating.push({x:e.x,y:e.y-28,text:'-'+Math.round(dmg),life:.55});if(e.hp<=0){let idx=enemies.indexOf(e);if(idx>=0){enemies.splice(idx,1);kills++;save.totalKills=(save.totalKills||0)+1;addCoins(e.type==='armored'?22:e.type==='brute'?15:e.type==='spitter'?9:e.type==='bomber'?8:e.type==='runner'?7:5);particles.push({x:e.x,y:e.y,life:.35,max:.35,color:'#a6bb83',kind:'burst'});checkAchievements();}}}
+function knockbackFor(e){if(e===boss)return 18;return ({walker:78,runner:88,spitter:68,brute:38,armored:22,bomber:62}[e.type]||55);}
+function hurt(e,dmg,knockback=0,slowDuration=0){if(e===boss){if(knockback>0)e.x=Math.min(900,e.x+knockback*.22);e.hp-=dmg;e.hit=.12;floating.push({x:e.x,y:e.y-75,text:'-'+Math.round(dmg),life:.55});if(e.hp<=0){addCoins(220+chapter*70);bossDeathFx=1.4;for(let n=0;n<26;n++)particles.push({x:e.x+(Math.random()-.5)*55,y:e.y+(Math.random()-.5)*75,life:.45+Math.random()*.55,max:1,color:n%3===0?'#fff0a6':(n%2?'#ff784e':'#ffbe67'),kind:'burst'});boss=null;save.achievements.first_bossDone=true;let count=2+Math.floor(Math.random()*2),pool=[0,1,2,3,4],rewards=[];for(let n=0;n<count;n++){let wi=pool.splice(Math.floor(Math.random()*pool.length),1)[0];rewards.push({wi,frags:5+Math.floor(Math.random()*3)});}lootModal={rewards,coins:180+chapter*50};addCoins(lootModal.coins);checkAchievements();}return;}if(!enemies.includes(e))return;if(knockback>0)e.knockback=Math.max(e.knockback||0,knockback);if(slowDuration>0){e.slowTimer=Math.max(e.slowTimer||0,slowDuration);e.slowFactor=.52;}if(e.type==='armored')dmg*=.62;e.hp-=dmg;e.hit=.12;floating.push({x:e.x,y:e.y-28,text:'-'+Math.round(dmg),life:.55});if(e.hp<=0){let idx=enemies.indexOf(e);if(idx>=0){enemies.splice(idx,1);kills++;save.totalKills=(save.totalKills||0)+1;addCoins(e.type==='armored'?22:e.type==='brute'?15:e.type==='spitter'?9:e.type==='bomber'?8:e.type==='runner'?7:5);particles.push({x:e.x,y:e.y,life:.35,max:.35,color:'#a6bb83',kind:'burst'});checkAchievements();}}}
 function bossCarCenter(){return player.x+105;}
 function bossDamagePlayer(raw,x=player.x+105,y=405){const vehicle=getVehicle(),vu=getVehicleUpgrade();player.hp-=Math.max(6,raw-(vehicle.defense+vu.plating*1.5));particles.push({x,y,life:.32,max:.32,color:C.red,kind:'hit'});shake=10;}
 function spawnBoss(){
@@ -393,12 +394,14 @@ function updateGame(dt){
  if(spawned<quota){spawnTimer-=dt;if(spawnTimer<=0){spawnEnemy();spawnTimer=Math.max(.25,.82-chapter*.055-level*.009-(chapter*10+level)*.004);}}
  for(let e of enemies){
   e.attack-=dt;e.hit=Math.max(0,e.hit-dt);
+  if(e.slowTimer>0){e.slowTimer=Math.max(0,e.slowTimer-dt);if(e.slowTimer===0)e.slowFactor=1;}
+  if(e.knockback>0){const push=Math.min(e.knockback,360*dt);e.x+=push;e.knockback=Math.max(0,e.knockback-260*dt);}
   if(e.type==='spitter'){
-   if(e.x>player.x+250)e.x-=Math.min(e.x-(player.x+250),e.speed*.55*dt);
+   if(e.x>player.x+250)e.x-=Math.min(e.x-(player.x+250),e.speed*.55*(e.slowFactor||1)*dt);
    if(e.x<=player.x+470&&e.attack<=0){const sx=e.x-5,sy=e.y-12,tx=player.x+145,ty=390,dx=tx-sx,dy=ty-sy,len=Math.hypot(dx,dy)||1,speed=205+chapter*12+level*2;
     enemyProjectiles.push({x:sx,y:sy,vx:dx/len*speed,vy:dy/len*speed,r:9,damage:7+chapter*2+level*.65,life:4,kind:'acid'});e.attack=2.2;}
   }else{
-   let dx=(player.x+145)-e.x;if(dx>0)e.x+=Math.min(dx,e.speed*dt);else e.x-=Math.min(-dx,e.speed*dt);
+   let dx=(player.x+145)-e.x;if(dx>0)e.x+=Math.min(dx,e.speed*(e.slowFactor||1)*dt);else e.x-=Math.min(-dx,e.speed*(e.slowFactor||1)*dt);
    if(e.x<=player.x+175&&e.attack<=0&&!e.exploded){
     let diff=chapter*10+level;let base=e.type==='armored'?13:e.type==='brute'?11:e.type==='bomber'?17:e.type==='runner'?7:5;
     let dmg=base*(1+diff*.035+diff*diff*.00045);player.hp-=Math.max(1,dmg-(vehicle.defense+vu.plating*1.5));
@@ -428,7 +431,7 @@ function updateGame(dt){
   if(overlapsCar&&p.life>0){bossDamagePlayer(p.damage,p.x,p.y);p.life=0;}
  }
  bossProjectiles=bossProjectiles.filter(p=>p.life>0&&p.x>-50&&p.x<W+50&&p.y>250&&p.y<470);
- for(let b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(b.rocket){let hit=allTargets().find(e=>Math.hypot(e.x-b.x,e.y-b.y)<(e===boss?45:22));if(hit){allTargets().filter(e=>Math.hypot(e.x-hit.x,e.y-hit.y)<b.blast).forEach(e=>hurt(e,b.damage*(e===hit?1:b.splash)));b.life=0;particles.push({x:b.x,y:b.y,life:.38,max:.38,color:'#ffad60',kind:'burst'});}}else{let hit=allTargets().find(e=>Math.hypot(e.x-b.x,e.y-b.y)<(e===boss?48:14));if(hit){hurt(hit,b.damage);b.life=0;}}}
+ for(let b of bullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.life-=dt;if(b.rocket){let hit=allTargets().find(e=>Math.hypot(e.x-b.x,e.y-b.y)<(e===boss?45:22));if(hit){allTargets().filter(e=>Math.hypot(e.x-hit.x,e.y-hit.y)<b.blast).forEach(e=>hurt(e,b.damage*(e===hit?1:b.splash),b.knockback||0));b.life=0;particles.push({x:b.x,y:b.y,life:.38,max:.38,color:'#ffad60',kind:'burst'});}}else{let hit=allTargets().find(e=>Math.hypot(e.x-b.x,e.y-b.y)<(e===boss?48:14));if(hit){hurt(hit,b.damage,b.knockback||0);b.life=0;}}}
  bullets=bullets.filter(b=>b.life>0&&b.x<W+30&&b.x>0&&b.y>150&&b.y<440);
  for(let p of particles){p.life-=dt;if(p.kind==='flame'){p.x+=(p.vx||0)*dt;p.y+=(p.vy||0)*dt;}}if(bossDeathFx>0)bossDeathFx=Math.max(0,bossDeathFx-dt);particles=particles.filter(p=>p.life>0);for(let f of floating){f.y-=22*dt;f.life-=dt;}floating=floating.filter(f=>f.life>0);shake=Math.max(0,shake-dt*20);
  if(player.hp<=0){player.hp=0;finishMission(false);return;}
